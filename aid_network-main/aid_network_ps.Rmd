@@ -1,6 +1,6 @@
 ---
 title: "PLSC 508 Problem Set: The 2010 Foreign Aid Network"
-author: "Yasin"
+author: "Yasin Shafi"
 date: "`r format(Sys.Date(), '%B %d, %Y')`"
 output:
   pdf_document:
@@ -28,9 +28,13 @@ ord <- function(n) paste0(n, ifelse(n %% 100 %in% 11:13, "th",
 
 # Data
 
-The data come from Oishi, Ito, Murase, Takikawa and Sakamoto (2022), "Evolution of global development cooperation: An analysis of aid flows with hierarchical stochastic block models," *PLOS ONE* 17(8): e0272440. The replication files are at <https://github.com/kj-oishi/aid_network>. Each annual file is an edge list of official development assistance (ODA) commitments from a donor to a recipient, built from OECD and AidData records. Donors include governments, multilateral agencies and private foundations. I analyze the 2010 cross-section.
+The data come from Oishi, Ito, Murase, Takikawa and Sakamoto (2022), "Evolution of global development cooperation: An analysis of aid flows with hierarchical stochastic block models," *PLOS ONE* 17(8): e0272440. The original replication files are at <https://github.com/kj-oishi/aid_network>. The data and code to reproduce this write-up are at <https://github.com/yasinshafi/plsc508_hw1/>. Each annual file is an edge list of official development assistance (ODA) commitments from a donor to a recipient, built from OECD and AidData records. Donors include governments, multilateral agencies and private foundations. I analyze the 2010 cross-section.
 
-Edges are directed (donor $\to$ recipient) and weighted by the commitment amount in USD millions. For community detection I also use the authors' normalized weight, $w_{ij} = f_{ij} / (s^{out}_i \, s^{in}_j)$. This weight discounts a tie when the donor spreads its aid widely or the recipient draws from many donors.
+I treat each of these as one donor. Multilateral agencies such as IDA, the EU institutions and the Global Fund sit in the same network as single countries. Their funding comes from member governments, but the data do not show those transfers.
+
+The data reflect the authors' choices. They use AidData only for China's "ODA-like" assistance. They do not add comparable AidData records for other emerging donors. India and Brazil never appear as donors. Türkiye appears only in a few years and is absent in 2010. The 2010 network is therefore mostly a network of OECD-reporting donors plus China.
+
+Edges are directed (donor $\to$ recipient) and weighted by the commitment amount in USD millions. For community detection and the network layout, I also use the authors' normalized weight, $w_{ij} = f_{ij} / (s^{out}_i \, s^{in}_j)$. This weight discounts a tie when the donor spreads its aid widely or the recipient draws from many donors.
 
 ```{r data}
 edges  <- fromJSON(file.path("data", sprintf("year_%d_s.json", YEAR)))
@@ -51,6 +55,7 @@ V(g)$role     <- ifelse(V(g)$is_donor & V(g)$is_recip, "Donor & recipient",
                  ifelse(V(g)$is_donor, "Donor", "Recipient"))
 V(g)$strength <- strength(g, mode = "all", weights = E(g)$weight)
 V(g)$short    <- sub(" \\(People's Republic of\\)", "", V(g)$name)
+V(g)$short    <- sub("International Development Association \\[IDA\\]", "IDA", V(g)$short)
 
 desc <- data.frame(
   Statistic = c("Nodes", "Edges", "Donors (out-degree > 0)",
@@ -153,7 +158,7 @@ ggplot(cp, aes(deg, str)) +
 
 Tables 2–3 and Figure 2 show that volume and breadth are related but not the same thing.
 
-- **Donors.** The rank correlation between out-degree and out-strength is `r round(rho_don, 2)`. The United States, Japan, Germany and France are high on both: they give a lot and to many recipients. IDA is the clearest exception. It is 3rd by volume but ranks only `r ord(donors$rank_deg[donors$actor == "International Development Association [IDA]"])` by out-degree, because it concentrates large commitments on fewer countries. Many small multilateral funds have both low degree and low strength.
+- **Donors.** The rank correlation between out-degree and out-strength is `r round(rho_don, 2)`. The United States, Japan, Germany and France are high on both: they give a lot and to many recipients. IDA is the clearest exception. It is 3rd by volume but ranks only `r ord(donors$rank_deg[donors$actor == "IDA"])` by out-degree, because it concentrates large commitments on fewer countries. Many small multilateral funds have both low degree and low strength.
 - **Recipients.** The correlation is higher, `r round(rho_rec, 2)`. Recipients that draw from many donors also tend to receive more money. The top recipients by volume (India, Afghanistan, Pakistan) all have more than 30 donors. Even so, the ordering by in-degree differs from the ordering by in-strength. India ranks first by volume but `r ord(recips$rank_deg[recips$actor == "India"])` by number of donors.
 
 # Reciprocity and Transitivity
@@ -192,6 +197,7 @@ null  <- replicate(N_SIM, {
 })
 p_val <- pmin(1, 2 * pmin((rowSums(null >= obs) + 1) / (N_SIM + 1),
                           (rowSums(null <= obs) + 1) / (N_SIM + 1)))
+names(p_val) <- names(obs)
 
 tab <- data.frame(
   Measure = c("Reciprocity (directed graph)",
@@ -209,9 +215,11 @@ knitr::kable(tab, caption = sprintf(
   align = "lrrrr", row.names = FALSE)
 ```
 
+With `r N_SIM` rewirings, the smallest possible p-value is `r round(2 / (N_SIM + 1), 3)`.
+
 **Reciprocity** is `r round(recip, 3)`. No pair of actors sends aid to each other. This is a consequence of the near-bipartite structure: recipients almost never give aid, so mutual ties cannot form.
 
-**Transitivity.** For the same reason, ordinary triangle-based transitivity is uninformative here, since a bipartite graph has no triangles. I use three related measures instead:
+**Transitivity.** The network is nearly bipartite. A bipartite graph has no triangles. So ordinary transitivity is not informative here. I use three related measures instead:
 
 - **Robins–Alexander bipartite clustering:** the share of three-step paths (donor–recipient–donor–recipient) that close into four-cycles. In plain terms: if two donors share one recipient, how often do they share another?
 - **Transitivity of the donor projection,** where two donors are tied if they share at least one recipient.
@@ -269,8 +277,16 @@ relabel <- setNames(seq_len(nrow(cs)),
                     as.character(as.integer(names(sort(table(memb), decreasing = TRUE)))))
 V(g)$comm2 <- relabel[as.character(V(g)$comm)]
 
-knitr::kable(cs, caption = sprintf(
-  "Louvain communities (modularity Q = %.3f)", modularity(best)), align = "lrrrll", row.names = FALSE)
+# France's community: recipients in North Africa or the Middle East
+fr_rec  <- V(g)$is_recip & V(g)$comm == V(g)$comm[V(g)$name == "France"]
+fr_n    <- sum(fr_rec)
+fr_mena <- sum(V(g)$region[fr_rec] %in% c("Africa, North of Sahara", "Middle East"))
+
+knitr::kable(cs, format = "latex", booktabs = TRUE, row.names = FALSE,
+             caption = sprintf("Louvain communities (modularity Q = %.3f)", modularity(best)),
+             align = c("r", "r", "r", "r", ">{\\raggedright\\arraybackslash}p{5.5cm}",
+                       ">{\\raggedright\\arraybackslash}p{3cm}"),
+             position = "!h")
 ```
 
 ```{r fig-comm, fig.width = 8, fig.height = 8, fig.cap = "Louvain communities. The layout is the same as in Figure 1; color indicates community, numbered as in Table 5."}
@@ -291,12 +307,14 @@ legend("bottomleft", legend = paste("Community", names(comm_pal)),
 
 Louvain finds `r max(memb)` communities with modularity Q = `r round(modularity(best), 3)`. The partition is fairly stable across runs: the mean normalized mutual information with the best partition is `r round(nmi, 2)`.
 
-- **Community 1** is the largest, with `r cs$Size[1]` actors. It contains the main donors (United States, Japan, IDA) and most recipients across Asia and Africa. It is the core visible in Figure 1.
+- **Community 1** is the largest, with `r cs$Size[1]` actors. It contains the main donors (United States, Japan, IDA) and about half of all recipients (`r cs$Recipients[1]` of `r sum(V(g)$is_recip)`). It is the core visible in Figure 1.
 - **The smaller communities** each pair one or a few donors with the recipients that depend on them most. Examples:
-  - France with Arab donors, whose largest recipients are Egypt, the Palestinian territories, Morocco and Jordan;
+  - France with Arab donors. Most of its recipients are in North Africa and the Middle East (`r fr_mena` of `r fr_n`). Table 5 lists sub-Saharan Africa because the data split these recipients into two region codes.
   - Australia and New Zealand with the Pacific islands;
   - the Caribbean Development Bank with Caribbean states.
 
 Because the normalized weight measures how important a tie is to both donor and recipient, these communities are best read as relationships of concentrated mutual dependence, not total dollar flows.
+
+Several communities mix countries and multilateral agencies. For example, Community 1 joins the United States and Japan with IDA. This follows from treating multilaterals as donors in their own right.
 
 Community detection here reflects the near-bipartite structure. Each community is a donor–recipient group, not a set of similar actors. This is the main way the Louvain result differs from the stochastic block model in the original paper, which places donors and recipients in separate blocks.
