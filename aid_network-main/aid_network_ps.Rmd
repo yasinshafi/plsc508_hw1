@@ -1,0 +1,302 @@
+---
+title: "PLSC 508 Problem Set: The 2010 Foreign Aid Network"
+author: "Yasin"
+date: "`r format(Sys.Date(), '%B %d, %Y')`"
+output:
+  pdf_document:
+    number_sections: true
+    fig_caption: true
+geometry: margin=1in
+fontsize: 11pt
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE,
+                      fig.align = "center")
+library(igraph); library(jsonlite); library(ggplot2); library(ggrepel); library(dplyr)
+
+# igraph 1.x / 2.x compatibility
+if (!exists("as_undirected")) as_undirected <- igraph::as.undirected
+
+YEAR  <- 2010
+N_SIM <- 500
+set.seed(508)
+options(knitr.kable.NA = "")
+ord <- function(n) paste0(n, ifelse(n %% 100 %in% 11:13, "th",
+                     c("th","st","nd","rd",rep("th",6))[n %% 10 + 1]))
+```
+
+# Data
+
+The data come from Oishi, Ito, Murase, Takikawa and Sakamoto (2022), "Evolution of global development cooperation: An analysis of aid flows with hierarchical stochastic block models," *PLOS ONE* 17(8): e0272440. The replication files are at <https://github.com/kj-oishi/aid_network>. Each annual file is an edge list of official development assistance (ODA) commitments from a donor to a recipient, built from OECD and AidData records. Donors include governments, multilateral agencies and private foundations. I analyze the 2010 cross-section.
+
+Edges are directed (donor $\to$ recipient) and weighted by the commitment amount in USD millions. For community detection I also use the authors' normalized weight, $w_{ij} = f_{ij} / (s^{out}_i \, s^{in}_j)$. This weight discounts a tie when the donor spreads its aid widely or the recipient draws from many donors.
+
+```{r data}
+edges  <- fromJSON(file.path("data", sprintf("year_%d_s.json", YEAR)))
+actors <- read.csv("data/actors.csv", stringsAsFactors = FALSE)
+
+edges <- edges |>
+  group_by(donor) |> mutate(s_out = sum(weight)) |> ungroup() |>
+  group_by(recip) |> mutate(s_in  = sum(weight)) |> ungroup() |>
+  mutate(gravity = weight / (s_out * s_in))
+
+g <- graph_from_data_frame(edges[, c("donor", "recip", "weight", "gravity")],
+                           directed = TRUE)
+V(g)$region   <- actors$region[match(V(g)$name, actors$actor)]
+V(g)$region[is.na(V(g)$region)] <- "Unknown"
+V(g)$is_donor <- degree(g, mode = "out") > 0
+V(g)$is_recip <- degree(g, mode = "in")  > 0
+V(g)$role     <- ifelse(V(g)$is_donor & V(g)$is_recip, "Donor & recipient",
+                 ifelse(V(g)$is_donor, "Donor", "Recipient"))
+V(g)$strength <- strength(g, mode = "all", weights = E(g)$weight)
+V(g)$short    <- sub(" \\(People's Republic of\\)", "", V(g)$name)
+
+desc <- data.frame(
+  Statistic = c("Nodes", "Edges", "Donors (out-degree > 0)",
+                "Recipients (in-degree > 0)", "Both donor and recipient",
+                "Density (directed)", "Total commitments (USD m)"),
+  Value = c(vcount(g), ecount(g), sum(V(g)$is_donor), sum(V(g)$is_recip),
+            sum(V(g)$is_donor & V(g)$is_recip),
+            round(edge_density(g), 3),
+            format(round(sum(E(g)$weight)), big.mark = ",")))
+knitr::kable(desc, caption = sprintf("Descriptive statistics, %d", YEAR), align = "lr", row.names = FALSE)
+```
+
+Table 1 shows that the network is almost bipartite. Of `r vcount(g)` actors, only `r sum(V(g)$is_donor & V(g)$is_recip)` (China) both gives and receives aid. Everyone else is either a donor or a recipient.
+
+# Visualization
+
+```{r fig-network, fig.width = 8, fig.height = 8, fig.cap = "Foreign aid network, 2010. Squares are donors, circles are recipients. Node size is proportional to the square root of total commitments given or received. Color is region or actor type. Labels mark the 12 actors with the largest total commitments."}
+reg_levels <- sort(unique(V(g)$region))
+pal <- setNames(hcl.colors(length(reg_levels), "Dark 3"), reg_levels)
+
+g_lay <- as_undirected(g, mode = "collapse",
+                       edge.attr.comb = list(weight = "sum", gravity = "sum"))
+lay <- layout_with_fr(g_lay, weights = 1 + 50 * E(g_lay)$gravity / max(E(g_lay)$gravity),
+                      niter = 3000)
+lay <- apply(lay, 2, function(x) { q <- quantile(x, c(.02, .98)); pmin(pmax(x, q[1]), q[2]) })
+top_lab <- V(g)$name[order(-V(g)$strength)][1:12]
+lab <- ifelse(V(g)$name %in% top_lab, V(g)$short, NA)
+
+par(mar = c(0, 0, 0, 0))
+plot(g, layout = lay,
+     vertex.size  = 1.5 + 6 * sqrt(V(g)$strength / max(V(g)$strength)),
+     vertex.color = pal[V(g)$region],
+     vertex.shape = ifelse(V(g)$is_donor, "square", "circle"),
+     vertex.frame.color = NA,
+     vertex.label = lab, vertex.label.cex = 0.6, vertex.label.color = "black",
+     vertex.label.family = "sans",
+     edge.width = 0.2 + 1.5 * (E(g)$weight / max(E(g)$weight))^0.5,
+     edge.color = adjustcolor("grey40", 0.15), edge.arrow.size = 0)
+legend("bottomleft", legend = names(pal), col = pal, pch = 16, cex = 0.6, bty = "n")
+legend("bottomright", legend = c("Donor", "Recipient"), pch = c(15, 16),
+       cex = 0.6, bty = "n")
+```
+
+Figure 1 shows a core–periphery structure. The largest bilateral and multilateral donors (the United States, Japan, IDA, the EU institutions, Germany, France) sit at the center. They are tied to most recipients. Peripheral recipients form small regional clusters around donors that specialize in them, for example Pacific island states and Caribbean states.
+
+# Centrality
+
+Because ties run from donors to recipients, I use direction-specific measures:
+
+- For donors: **out-degree** (number of recipients) and **out-strength** (total USD committed).
+- For recipients: **in-degree** (number of donors) and **in-strength** (total USD received).
+
+```{r centrality}
+cent <- data.frame(
+  actor        = V(g)$short,
+  role         = V(g)$role,
+  region       = V(g)$region,
+  out_degree   = degree(g, mode = "out"),
+  in_degree    = degree(g, mode = "in"),
+  out_strength = strength(g, mode = "out", weights = E(g)$weight),
+  in_strength  = strength(g, mode = "in",  weights = E(g)$weight))
+
+donors <- cent |> filter(out_degree > 0) |>
+  mutate(rank_str = rank(-out_strength, ties.method = "min"),
+         rank_deg = rank(-out_degree,   ties.method = "min"))
+recips <- cent |> filter(in_degree > 0) |>
+  mutate(rank_str = rank(-in_strength, ties.method = "min"),
+         rank_deg = rank(-in_degree,   ties.method = "min"))
+
+rho_don <- cor(donors$out_degree, donors$out_strength, method = "spearman")
+rho_rec <- cor(recips$in_degree,  recips$in_strength,  method = "spearman")
+
+top_d <- donors |> arrange(rank_str) |> head(10) |>
+  transmute(Donor = actor, `Out-strength (USD m)` = format(round(out_strength), big.mark = ","),
+            `Strength rank` = rank_str, `Out-degree` = out_degree, `Degree rank` = rank_deg)
+top_r <- recips |> arrange(rank_str) |> head(10) |>
+  transmute(Recipient = actor, `In-strength (USD m)` = format(round(in_strength), big.mark = ","),
+            `Strength rank` = rank_str, `In-degree` = in_degree, `Degree rank` = rank_deg)
+
+knitr::kable(top_d, caption = "Top 10 donors by out-strength", align = "lrrrr", row.names = FALSE)
+knitr::kable(top_r, caption = "Top 10 recipients by in-strength", align = "lrrrr", row.names = FALSE)
+```
+
+```{r fig-centrality, fig.width = 8, fig.height = 4.5, fig.cap = "Degree versus strength for donors (left) and recipients (right). The y-axis is on a log scale."}
+cp <- bind_rows(
+  donors |> mutate(side = "Donors", deg = out_degree, str = out_strength),
+  recips |> mutate(side = "Recipients", deg = in_degree, str = in_strength)) |>
+  group_by(side) |>
+  mutate(lab = ifelse(rank(-str) <= 6, actor, NA)) |> ungroup()
+
+ggplot(cp, aes(deg, str)) +
+  geom_point(aes(color = region), alpha = 0.8, size = 1.5) +
+  geom_text_repel(aes(label = lab), size = 2.4, max.overlaps = 30, na.rm = TRUE) +
+  scale_y_log10(labels = scales::comma) +
+  scale_color_manual(values = pal) +
+  facet_wrap(~ side, scales = "free_x") +
+  labs(x = "Degree (number of partners)", y = "Strength (USD m)", color = NULL) +
+  theme_minimal(base_size = 9) + theme(legend.position = "bottom")
+```
+
+Tables 2–3 and Figure 2 show that volume and breadth are related but not the same thing.
+
+- **Donors.** The rank correlation between out-degree and out-strength is `r round(rho_don, 2)`. The United States, Japan, Germany and France are high on both: they give a lot and to many recipients. IDA is the clearest exception. It is 3rd by volume but ranks only `r ord(donors$rank_deg[donors$actor == "International Development Association [IDA]"])` by out-degree, because it concentrates large commitments on fewer countries. Many small multilateral funds have both low degree and low strength.
+- **Recipients.** The correlation is higher, `r round(rho_rec, 2)`. Recipients that draw from many donors also tend to receive more money. The top recipients by volume (India, Afghanistan, Pakistan) all have more than 30 donors. Even so, the ordering by in-degree differs from the ordering by in-strength. India ranks first by volume but `r ord(recips$rank_deg[recips$actor == "India"])` by number of donors.
+
+# Reciprocity and Transitivity
+
+```{r transitivity}
+recip <- reciprocity(g)
+
+bip_matrix <- function(graph) {
+  A <- as_adjacency_matrix(graph, sparse = TRUE)
+  A[Matrix::rowSums(A) > 0, Matrix::colSums(A) > 0]
+}
+ra_clustering <- function(A) {
+  S  <- as.matrix(A %*% Matrix::t(A))
+  c4 <- sum(choose(S[upper.tri(S)], 2))
+  kd <- Matrix::rowSums(A); kr <- Matrix::colSums(A)
+  idx <- Matrix::which(A > 0, arr.ind = TRUE)
+  l3 <- sum((kd[idx[, 1]] - 1) * (kr[idx[, 2]] - 1))
+  4 * c4 / l3
+}
+trans_stats <- function(graph) {
+  A <- bip_matrix(graph)
+  D <- as.matrix(A %*% Matrix::t(A)); diag(D) <- 0
+  R <- as.matrix(Matrix::t(A) %*% A); diag(R) <- 0
+  pd <- graph_from_adjacency_matrix(D, mode = "undirected", weighted = TRUE)
+  pr <- graph_from_adjacency_matrix(R, mode = "undirected", weighted = TRUE)
+  c(ra    = ra_clustering(A),
+    d_den = edge_density(pd), d_tr = transitivity(pd, type = "global"),
+    r_den = edge_density(pr), r_tr = transitivity(pr, type = "global"))
+}
+
+g_bin <- delete_edge_attr(delete_edge_attr(g, "weight"), "gravity")
+obs   <- trans_stats(g_bin)
+null  <- replicate(N_SIM, {
+  gr <- rewire(g_bin, with = keeping_degseq(niter = ecount(g_bin) * 10, loops = FALSE))
+  trans_stats(simplify(gr))
+})
+p_val <- pmin(1, 2 * pmin((rowSums(null >= obs) + 1) / (N_SIM + 1),
+                          (rowSums(null <= obs) + 1) / (N_SIM + 1)))
+
+tab <- data.frame(
+  Measure = c("Reciprocity (directed graph)",
+              "Bipartite clustering (Robins-Alexander)",
+              "Donor projection: density", "Donor projection: transitivity",
+              "Recipient projection: density", "Recipient projection: transitivity"),
+  Observed  = round(c(recip, obs), 3),
+  `Null mean` = c(NA, round(rowMeans(null), 3)),
+  `Null 95% interval` = c(NA, sprintf("[%.3f, %.3f]",
+                                      apply(null, 1, quantile, .025),
+                                      apply(null, 1, quantile, .975))),
+  p = c(NA, round(p_val, 3)), check.names = FALSE)
+knitr::kable(tab, caption = sprintf(
+  "Reciprocity and transitivity, compared with %d degree-preserving rewirings", N_SIM),
+  align = "lrrrr", row.names = FALSE)
+```
+
+**Reciprocity** is `r round(recip, 3)`. No pair of actors sends aid to each other. This is a consequence of the near-bipartite structure: recipients almost never give aid, so mutual ties cannot form.
+
+**Transitivity.** For the same reason, ordinary triangle-based transitivity is uninformative here, since a bipartite graph has no triangles. I use three related measures instead:
+
+- **Robins–Alexander bipartite clustering:** the share of three-step paths (donor–recipient–donor–recipient) that close into four-cycles. In plain terms: if two donors share one recipient, how often do they share another?
+- **Transitivity of the donor projection,** where two donors are tied if they share at least one recipient.
+- **Transitivity of the recipient projection,** where two recipients are tied if they share at least one donor.
+
+Each observed value is compared with `r N_SIM` rewired networks. Each rewiring keeps every donor's out-degree and every recipient's in-degree fixed and shuffles who is tied to whom (Table 4, Figure 3).
+
+```{r fig-null, fig.width = 8, fig.height = 3, fig.cap = "Observed values (red line) against the distribution from degree-preserving rewirings."}
+show <- c(ra = "Bipartite clustering", d_tr = "Donor-projection transitivity")
+nd <- do.call(rbind, lapply(names(show), function(k)
+  data.frame(stat = show[[k]], val = null[k, ])))
+od <- data.frame(stat = unname(show), val = obs[names(show)])
+ggplot(nd, aes(val)) +
+  geom_histogram(bins = 30, fill = "grey70", color = "white") +
+  geom_vline(data = od, aes(xintercept = val), color = "firebrick", linewidth = 1) +
+  facet_wrap(~ stat, scales = "free") +
+  labs(x = NULL, y = "Count") + theme_minimal(base_size = 9)
+```
+
+The results:
+
+- **Bipartite clustering** is `r round(obs["ra"], 3)`, above the null mean of `r round(mean(null["ra", ]), 3)`, and outside the null interval (p = `r round(p_val["ra"], 3)`). Donors that share one recipient share more additional recipients than degree alone predicts, so donor portfolios overlap in clusters.
+- **Donor projection.** Both density and transitivity are *below* the null (density `r round(obs["d_den"], 3)` vs. `r round(mean(null["d_den", ]), 3)`). More donor pairs share no recipient at all than chance would produce. This is consistent with some donors specializing in particular regions or sets of countries.
+- **Recipient projection.** It is nearly complete, and its density and transitivity are indistinguishable from the null. Because the largest donors fund almost every recipient, nearly every pair of recipients shares at least one donor.
+
+# Community Detection
+
+I apply the Louvain algorithm to the undirected version of the network, using the normalized weights. The algorithm is run 50 times, and I keep the partition with the highest modularity.
+
+```{r communities}
+g_u <- as_undirected(g, mode = "collapse",
+                     edge.attr.comb = list(weight = "sum", gravity = "sum"))
+w_comm <- E(g_u)$gravity / max(E(g_u)$gravity)
+runs <- lapply(1:50, function(i) cluster_louvain(g_u, weights = w_comm))
+best <- runs[[which.max(sapply(runs, modularity))]]
+nmi  <- mean(sapply(runs, function(x) compare(x, best, method = "nmi")))
+memb <- membership(best)
+V(g)$comm <- memb[V(g)$name]
+
+cs <- data.frame(actor = V(g)$short, comm = V(g)$comm, role = V(g)$role,
+                 region = V(g)$region, strength = V(g)$strength) |>
+  group_by(comm) |>
+  summarise(Size = n(),
+            Donors = sum(role != "Recipient"),
+            Recipients = sum(role != "Donor"),
+            `Largest donors` = paste(head(actor[role != "Recipient"][
+              order(-strength[role != "Recipient"])], 3), collapse = "; "),
+            `Most common recipient region` =
+              names(sort(table(region[role != "Donor"]), decreasing = TRUE))[1],
+            .groups = "drop") |>
+  arrange(desc(Size)) |> mutate(Community = row_number(), .before = 1) |> select(-comm)
+
+# relabel communities 1..k by size for the figure
+relabel <- setNames(seq_len(nrow(cs)),
+                    as.character(as.integer(names(sort(table(memb), decreasing = TRUE)))))
+V(g)$comm2 <- relabel[as.character(V(g)$comm)]
+
+knitr::kable(cs, caption = sprintf(
+  "Louvain communities (modularity Q = %.3f)", modularity(best)), align = "lrrrll", row.names = FALSE)
+```
+
+```{r fig-comm, fig.width = 8, fig.height = 8, fig.cap = "Louvain communities. The layout is the same as in Figure 1; color indicates community, numbered as in Table 5."}
+k <- max(V(g)$comm2)
+comm_pal <- setNames(hcl.colors(k, "Set 2"), seq_len(k))
+par(mar = c(0, 0, 0, 0))
+plot(g, layout = lay,
+     vertex.size  = 1.5 + 6 * sqrt(V(g)$strength / max(V(g)$strength)),
+     vertex.color = comm_pal[as.character(V(g)$comm2)],
+     vertex.shape = ifelse(V(g)$is_donor, "square", "circle"),
+     vertex.frame.color = NA,
+     vertex.label = lab, vertex.label.cex = 0.6, vertex.label.color = "black",
+     vertex.label.family = "sans",
+     edge.color = adjustcolor("grey40", 0.12), edge.arrow.size = 0, edge.width = 0.3)
+legend("bottomleft", legend = paste("Community", names(comm_pal)),
+       col = comm_pal, pch = 16, cex = 0.6, bty = "n")
+```
+
+Louvain finds `r max(memb)` communities with modularity Q = `r round(modularity(best), 3)`. The partition is fairly stable across runs: the mean normalized mutual information with the best partition is `r round(nmi, 2)`.
+
+- **Community 1** is the largest, with `r cs$Size[1]` actors. It contains the main donors (United States, Japan, IDA) and most recipients across Asia and Africa. It is the core visible in Figure 1.
+- **The smaller communities** each pair one or a few donors with the recipients that depend on them most. Examples:
+  - France with Arab donors, whose largest recipients are Egypt, the Palestinian territories, Morocco and Jordan;
+  - Australia and New Zealand with the Pacific islands;
+  - the Caribbean Development Bank with Caribbean states.
+
+Because the normalized weight measures how important a tie is to both donor and recipient, these communities are best read as relationships of concentrated mutual dependence, not total dollar flows.
+
+Community detection here reflects the near-bipartite structure. Each community is a donor–recipient group, not a set of similar actors. This is the main way the Louvain result differs from the stochastic block model in the original paper, which places donors and recipients in separate blocks.

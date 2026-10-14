@@ -1,0 +1,128 @@
+=== Foreign aid network, 2010 ===
+                          stat       value
+                         Nodes    203.0000
+                         Edges   3926.0000
+       Donors (out-degree > 0)     52.0000
+    Recipients (in-degree > 0)    152.0000
+          Donor-cum-recipients      1.0000
+            Density (directed)      0.0957
+ Total ODA commitments (USD m) 504505.0000
+
+--- Centrality ---
+Spearman(degree, strength): donors = 0.62 ; recipients = 0.83 
+Bangladesh: in-degree = 37 (rank 13 of 152 ); in-strength = 10451.1 (rank 12 )
+
+Top donors:
+                                       actor                  region out_strength
+                               United States North & Central America      96448.4
+                                       Japan           Far East Asia      60988.4
+ International Development Association [IDA]           Multilaterals      58811.1
+                             EU Institutions           Multilaterals      40239.2
+                                      France                  Europe      39215.9
+                                     Germany                  Europe      37503.4
+                                 Global Fund           Multilaterals      12227.7
+                                   Australia                 Oceania      11432.5
+                                       Spain                  Europe      11385.2
+                              United Kingdom                  Europe      11021.2
+ rank_strength out_degree rank_degree   hub
+             1        141           2 1.000
+             2        145           1 0.628
+             3         65          33 0.719
+             4        130           6 0.190
+             5        135           5 0.164
+             6        140           3 0.272
+             7         86          29 0.069
+             8        108          16 0.057
+             9        122           9 0.046
+            10        129           8 0.110
+
+Top recipients:
+                            actor                  region   ldc in_strength
+                            India    South & Central Asia FALSE     31109.5
+                      Afghanistan    South & Central Asia  TRUE     31039.7
+                         Pakistan    South & Central Asia FALSE     19107.2
+ Democratic Republic of the Congo Africa, South of Sahara FALSE     14787.6
+                         Viet Nam           Far East Asia FALSE     14561.6
+                            Haiti North & Central America  TRUE     14268.3
+                         Ethiopia Africa, South of Sahara  TRUE     14243.8
+                            Kenya Africa, South of Sahara FALSE     13437.0
+                         Tanzania Africa, South of Sahara  TRUE     13064.8
+                        Indonesia           Far East Asia FALSE     11936.2
+ rank_strength in_degree rank_degree authority
+             1        34          35     0.929
+             2        35          28     1.000
+             3        39           3     0.554
+             4        37          13     0.213
+             5        38           7     0.318
+             6        38           8     0.381
+             7        39           4     0.308
+             8        38           9     0.358
+             9        39           5     0.297
+            10        33          43     0.243
+
+--- Reciprocity detail ---
+Reciprocity = 0 ; mutual dyads = 0 
+
+--- Reciprocity / transitivity (observed vs degree-preserving null) ---
+                     statistic observed null_mean null_q025 null_q975 p_two_sided
+        reciprocity (directed)   0.0000        NA        NA        NA          NA
+ transitivity (directed graph)   0.0212        NA        NA        NA          NA
+                  bipartite_RA   0.7572    0.7431    0.7416    0.7447       0.004
+                 donor_density   0.9389    0.9671    0.9551    0.9751       0.004
+                   donor_trans   0.9554    0.9742    0.9688    0.9795       0.004
+            donor_trans_barrat   0.9902    0.9951    0.9932    0.9967       0.004
+                 recip_density   0.9962    0.9948    0.9900    0.9973       0.515
+                   recip_trans   0.9965    0.9957    0.9931    0.9975       0.499
+            recip_trans_barrat   0.9994    0.9988    0.9978    0.9994       0.100
+
+--- Communities ---
+Louvain modularity Q = 0.616 ; k = 10 ; mean NMI across 50 runs = 0.764 
+Walktrap Q = 0.407 ; k = 10 ; NMI with Louvain = 0.448 
+Louvain (log-USD weights) k = 5 ; NMI with gravity Louvain = 0.403 
+
+ comm n_nodes n_donors n_recipients n_ldc
+    3     101       27           74    28
+    6      27        8           20     2
+    4      21        5           16     4
+    5      14        2           12     5
+    7      11        1           10     0
+    2       9        3            6     3
+    8       9        2            7     2
+    1       6        2            4     2
+   10       3        1            2     0
+    9       2        1            1     0
+                                                                           top_donors
+           United States; Japan; International Development Association [IDA]; Germany
+                        EU Institutions; China; IMF (Concessional Trust Funds); Italy
+                                             France; Arab Fund (AFESD); Kuwait; UNRWA
+                                                               Australia; New Zealand
+                                                   Caribbean Development Bank [CarDB]
+ United Arab Emirates; African Development Bank [AfDB]; UN Peacebuilding Fund [UNPBF]
+                                                                 Portugal; Luxembourg
+                                       Nordic Development Fund [NDF]; Adaptation Fund
+                                                                       United Kingdom
+                                                                                UNECE
+                                                                              top_recips
+                                           India; Afghanistan; Pakistan; Viet Nam; Haiti
+                            China (People's Republic of); Turkey; Liberia; Congo; Serbia
+                                   Egypt; Palestinian Adm. Areas; Morocco; Jordan; Yemen
+                                Papua New Guinea; Solomon Islands; Samoa; Vanuatu; Tonga
+                                Guyana; Jamaica; Belize; Saint Kitts and Nevis; Dominica
+ Democratic Republic of the Congo; Central African Republic; Guinea; Comoros; Seychelles
+       Lao People's Democratic Republic; Timor-Leste; Namibia; Cabo Verde; Guinea-Bissau
+                                                  Senegal; Cambodia; Nicaragua; Honduras
+                                                                Saint Helena; Montserrat
+                                                                                 Belarus
+      modal_recip_region
+ Africa, South of Sahara
+                  Europe
+ Africa, South of Sahara
+                 Oceania
+ North & Central America
+ Africa, South of Sahara
+ Africa, South of Sahara
+ North & Central America
+ Africa, South of Sahara
+                  Europe
+
+Bangladesh is in community 3 

@@ -1,0 +1,11 @@
+"actor","region","out_strength","rank_strength","out_degree","rank_degree","hub"
+"United States","North & Central America",96448.4,1,141,2,1
+"Japan","Far East Asia",60988.4,2,145,1,0.628
+"International Development Association [IDA]","Multilaterals",58811.1,3,65,33,0.719
+"EU Institutions","Multilaterals",40239.2,4,130,6,0.19
+"France","Europe",39215.9,5,135,5,0.164
+"Germany","Europe",37503.4,6,140,3,0.272
+"Global Fund","Multilaterals",12227.7,7,86,29,0.069
+"Australia","Oceania",11432.5,8,108,16,0.057
+"Spain","Europe",11385.2,9,122,9,0.046
+"United Kingdom","Europe",11021.2,10,129,8,0.11

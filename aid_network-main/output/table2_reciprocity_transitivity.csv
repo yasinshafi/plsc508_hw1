@@ -1,0 +1,10 @@
+"statistic","observed","null_mean","null_q025","null_q975","p_two_sided"
+"reciprocity (directed)",0,NA,NA,NA,NA
+"transitivity (directed graph)",0.0212,NA,NA,NA,NA
+"bipartite_RA",0.7572,0.7431,0.7416,0.7447,0.004
+"donor_density",0.9389,0.9671,0.9551,0.9751,0.004
+"donor_trans",0.9554,0.9742,0.9688,0.9795,0.004
+"donor_trans_barrat",0.9902,0.9951,0.9932,0.9967,0.004
+"recip_density",0.9962,0.9948,0.99,0.9973,0.515
+"recip_trans",0.9965,0.9957,0.9931,0.9975,0.499
+"recip_trans_barrat",0.9994,0.9988,0.9978,0.9994,0.1
